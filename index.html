@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cyber Snake</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #111c33;
+    --panel-2: #18264a;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #22d3ee;
+    --snake: #34d399;
+    --snake-head: #10b981;
+    --brick: #f97316;
+    --brick-line: #7c2d12;
+    --grid: #16223f;
+    --ok: #22c55e;
+    --almost: #eab308;
+    --ko: #ef4444;
+    --radius: 12px;
+    --iam: #a78bfa;
+    --grc: #60a5fa;
+    --soc: #f472b6;
+    --ia: #2dd4bf;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  header { text-align: center; margin-bottom: 12px; }
+  h1 { margin: 0; font-size: 1.6rem; letter-spacing: .5px; }
+  h1 span { color: var(--accent); }
+  .subtitle { color: var(--muted); margin: 4px 0 0; font-size: .95rem; }
+
+  .hud {
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+    margin-bottom: 10px; width: 100%; max-width: 520px;
+  }
+  .hud .chip {
+    background: var(--panel); border: 1px solid var(--panel-2);
+    border-radius: 999px; padding: 6px 12px; font-size: .9rem;
+  }
+  .hud .chip b { color: var(--accent); }
+
+  .stage { position: relative; width: 100%; max-width: 520px; }
+  canvas {
+    display: block; width: 100%; aspect-ratio: 1 / 1;
+    background: var(--panel); border-radius: var(--radius);
+    border: 2px solid var(--panel-2); touch-action: none;
+  }
+
+  .overlay {
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(2, 6, 23, .78); border-radius: var(--radius);
+    padding: 12px; overflow-y: auto;
+  }
+  .overlay.visible { display: flex; }
+  .card {
+    background: var(--panel); border: 1px solid var(--panel-2);
+    border-radius: var(--radius); padding: 18px; width: 100%;
+    max-height: 100%; overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,.4);
+  }
+  .card h2 { margin: 0 0 8px; font-size: 1.25rem; }
+  .card p { margin: 6px 0; line-height: 1.45; }
+  .muted { color: var(--muted); font-size: .9rem; }
+
+  .tag {
+    display: inline-block; font-size: .75rem; font-weight: 700;
+    padding: 3px 9px; border-radius: 999px; color: #0b1020; margin-right: 6px;
+  }
+  .tag.IAM { background: var(--iam); }
+  .tag.GRC { background: var(--grc); }
+  .tag.SOC { background: var(--soc); }
+  .tag.IA  { background: var(--ia); }
+
+  .question { font-size: 1.05rem; font-weight: 600; margin: 10px 0 12px; line-height: 1.4; }
+  .choices { display: flex; flex-direction: column; gap: 8px; }
+  .choice {
+    text-align: left; background: var(--panel-2); color: var(--text);
+    border: 2px solid transparent; border-radius: 10px; padding: 10px 12px;
+    font-size: .95rem; line-height: 1.35; cursor: pointer; display: flex; gap: 10px;
+  }
+  .choice:hover:not(:disabled), .choice:focus-visible { border-color: var(--accent); outline: none; }
+  .choice:disabled { cursor: default; opacity: .75; }
+  .choice .key {
+    flex: 0 0 auto; width: 24px; height: 24px; border-radius: 6px;
+    background: var(--bg); color: var(--accent); font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; font-size: .85rem;
+  }
+  .choice.correct { border-color: var(--ok); opacity: 1; }
+  .choice.chosen-almost { border-color: var(--almost); opacity: 1; }
+  .choice.chosen-wrong { border-color: var(--ko); opacity: 1; }
+
+  .feedback { margin-top: 12px; padding: 10px 12px; border-radius: 10px; display: none; }
+  .feedback.visible { display: block; }
+  .feedback.ok { background: rgba(34,197,94,.12); border-left: 4px solid var(--ok); }
+  .feedback.almost { background: rgba(234,179,8,.12); border-left: 4px solid var(--almost); }
+  .feedback.ko { background: rgba(239,68,68,.12); border-left: 4px solid var(--ko); }
+  .feedback strong { display: block; margin-bottom: 4px; }
+
+  .btn {
+    background: var(--accent); color: #062029; border: none; border-radius: 10px;
+    padding: 10px 18px; font-size: 1rem; font-weight: 700; cursor: pointer; margin-top: 12px;
+  }
+  .btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  .btn.secondary { background: var(--panel-2); color: var(--text); }
+
+  .verdict { font-size: 1.4rem; font-weight: 800; margin: 6px 0; }
+  .verdict.ok { color: var(--ok); }
+  .verdict.ko { color: var(--almost); }
+  .score-big { font-size: 2.4rem; font-weight: 800; color: var(--accent); }
+  .breakdown { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 10px 0; }
+  .breakdown div { background: var(--panel-2); border-radius: 8px; padding: 6px 10px; font-size: .9rem; }
+  .recap { list-style: none; padding: 0; margin: 10px 0 0; font-size: .88rem; }
+  .recap li { padding: 6px 0; border-top: 1px solid var(--panel-2); }
+  .recap .res { font-weight: 700; margin-right: 4px; }
+  .recap .res.ok { color: var(--ok); }
+  .recap .res.almost { color: var(--almost); }
+  .recap .res.ko { color: var(--ko); }
+
+  .toast {
+    position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
+    background: var(--ko); color: #fff; padding: 6px 14px; border-radius: 999px;
+    font-weight: 700; font-size: .9rem; white-space: nowrap; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .toast.visible { opacity: 1; }
+
+  .pad { display: none; margin-top: 12px; gap: 6px;
+         grid-template-columns: repeat(3, 56px); grid-template-rows: repeat(2, 56px); }
+  .pad button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--panel-2);
+    border-radius: 10px; font-size: 1.4rem; cursor: pointer;
+  }
+  .pad .up { grid-column: 2; grid-row: 1; }
+  .pad .left { grid-column: 1; grid-row: 2; }
+  .pad .down { grid-column: 2; grid-row: 2; }
+  .pad .right { grid-column: 3; grid-row: 2; }
+  @media (pointer: coarse) { .pad { display: grid; } }
+
+  footer { margin-top: 14px; color: var(--muted); font-size: .8rem; text-align: center; max-width: 520px; }
+  kbd {
+    background: var(--panel-2); border-radius: 4px; padding: 1px 6px;
+    font-family: inherit; font-size: .85em;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Cyber <span>Snake</span></h1>
+  <p class="subtitle">Cyber Academy — validation des compétences</p>
+</header>
+
+<div class="hud" aria-live="polite">
+  <div class="chip">Question <b id="hud-q">0</b>/10</div>
+  <div class="chip">Bonnes réponses <b id="hud-score">0</b></div>
+  <div class="chip">Longueur <b id="hud-len">3</b></div>
+</div>
+
+<div class="stage">
+  <canvas id="board" width="520" height="520" aria-label="Plateau du jeu du serpent"></canvas>
+  <div class="toast" id="toast">Collision ! Le serpent repart.</div>
+
+  <!-- Écran d'accueil -->
+  <div class="overlay visible" id="screen-start">
+    <div class="card">
+      <h2>Prêt pour l'évaluation ?</h2>
+      <p>Guidez le serpent vers les <b>briques</b>. Chaque brique mangée met le jeu en pause et déclenche une question de cybersécurité.</p>
+      <p>10 questions tirées au hasard parmi 30, sur 4 domaines :
+        <span class="tag IAM">IAM</span><span class="tag GRC">GRC</span><span class="tag SOC">SOC</span><span class="tag IA">Sécurité de l'IA</span></p>
+      <p class="muted">Déplacement : flèches ou <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, balayage sur mobile. Réponse : clic ou touches <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>. Pause : <kbd>Espace</kbd>.</p>
+      <p class="muted">Une collision ne fait pas perdre la partie : le serpent repart de zéro et l'évaluation continue.</p>
+      <button class="btn" id="btn-start">Commencer</button>
+    </div>
+  </div>
+
+  <!-- Question -->
+  <div class="overlay" id="screen-quiz" role="dialog" aria-modal="true" aria-labelledby="quiz-question">
+    <div class="card">
+      <div>
+        <span class="tag" id="quiz-tag">IAM</span>
+        <span class="muted" id="quiz-progress">Question 1/10</span>
+      </div>
+      <div class="question" id="quiz-question"></div>
+      <div class="choices" id="quiz-choices"></div>
+      <div class="feedback" id="quiz-feedback" aria-live="polite"></div>
+      <button class="btn" id="btn-continue" hidden>Reprendre le jeu</button>
+    </div>
+  </div>
+
+  <!-- Pause -->
+  <div class="overlay" id="screen-pause">
+    <div class="card" style="text-align:center">
+      <h2>Pause</h2>
+      <button class="btn" id="btn-resume">Reprendre</button>
+    </div>
+  </div>
+
+  <!-- Résultat -->
+  <div class="overlay" id="screen-end">
+    <div class="card">
+      <h2>Résultat de l'évaluation</h2>
+      <div class="score-big" id="end-score">0/10</div>
+      <div class="verdict" id="end-verdict"></div>
+      <p class="muted" id="end-rule"></p>
+      <div class="breakdown" id="end-breakdown"></div>
+      <ul class="recap" id="end-recap"></ul>
+      <button class="btn" id="btn-restart">Rejouer (nouveau tirage)</button>
+    </div>
+  </div>
+</div>
+
+<div class="pad" aria-label="Commandes tactiles">
+  <button class="up" data-dir="up" aria-label="Haut">▲</button>
+  <button class="left" data-dir="left" aria-label="Gauche">◀</button>
+  <button class="down" data-dir="down" aria-label="Bas">▼</button>
+  <button class="right" data-dir="right" aria-label="Droite">▶</button>
+</div>
+
+<footer>Fichier autonome, aucune donnée transmise : les réponses restent dans le navigateur.</footer>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   PARAMÈTRES
+   ===================================================================== */
+const NB_QUESTIONS = 10;        // questions par partie
+const SEUIL_VALIDATION = 8;     // validé si score STRICTEMENT supérieur (> 8, soit 9 ou 10)
+const MIN_PAR_DOMAINE = 2;      // chaque domaine apparaît au moins 2 fois par partie
+const GRID = 20;                // plateau de 20 x 20 cases
+const VITESSE_INITIALE = 140;   // ms par déplacement
+const VITESSE_MIN = 85;
+
+const DOMAINES = {
+  IAM: "IAM",
+  GRC: "GRC",
+  SOC: "SOC",
+  IA:  "Sécurité de l'IA"
+};
+
+/* =====================================================================
+   BANQUE DE 30 QUESTIONS
+   Chaque question : une réponse juste, une presque juste, une fausse.
+   ===================================================================== */
+const BANQUE = [
+  // ---------------- IAM (8) ----------------
+  {
+    d: "IAM",
+    q: "Que signifie appliquer le principe du moindre privilège ?",
+    juste: "Accorder à chaque identité uniquement les droits nécessaires à sa mission, et seulement pour la durée nécessaire.",
+    presque: "Restreindre les droits des utilisateurs standards, tandis que les administrateurs conservent un accès complet et permanent.",
+    faux: "Donner les mêmes droits à tout le monde pour simplifier la gestion des accès.",
+    expl: "Le moindre privilège s'applique à toutes les identités, y compris (et surtout) aux comptes à privilèges : un accès admin permanent est précisément ce qu'il faut éviter."
+  },
+  {
+    d: "IAM",
+    q: "Quelle méthode d'authentification multifacteur résiste le mieux au phishing ?",
+    juste: "Une clé de sécurité FIDO2 / passkey, liée cryptographiquement au domaine du site.",
+    presque: "Une notification push avec saisie d'un nombre (number matching) sur le téléphone.",
+    faux: "Un mot de passe plus long, changé chaque mois.",
+    expl: "Le number matching limite la « fatigue MFA », mais un proxy de phishing (AiTM) peut toujours relayer la session. FIDO2 vérifie l'origine du site : la signature ne fonctionne pas sur un faux domaine."
+  },
+  {
+    d: "IAM",
+    q: "Un collaborateur change de service (cas « mover » du processus Joiner-Mover-Leaver). Que faire de ses droits ?",
+    juste: "Retirer les droits liés à l'ancien poste et attribuer ceux du nouveau poste, au moment de la mutation.",
+    presque: "Ajouter les droits du nouveau poste et retirer les anciens lors de la prochaine revue annuelle des habilitations.",
+    faux: "Conserver tous ses droits, au cas où il reviendrait dans son ancien service.",
+    expl: "Différer le retrait crée une accumulation de droits (« privilege creep ») et des conflits de séparation des tâches pendant des mois."
+  },
+  {
+    d: "IAM",
+    q: "Qu'est-ce qu'une campagne de revue (recertification) des habilitations efficace ?",
+    juste: "Les responsables métier confirment périodiquement que chaque accès est toujours justifié, et les accès non confirmés sont effectivement retirés.",
+    presque: "L'équipe IAM vérifie périodiquement que les comptes sont actifs et désactive les comptes inutilisés.",
+    faux: "Chaque utilisateur déclare lui-même, à son arrivée, les droits dont il pense avoir besoin.",
+    expl: "Supprimer les comptes dormants est utile mais ne dit rien de la légitimité des droits. Seul le métier peut juger si un accès est encore nécessaire, et la revue n'a de valeur que si elle aboutit à des retraits."
+  },
+  {
+    d: "IAM",
+    q: "Quelle est la bonne pratique pour gérer les comptes à privilèges (PAM) ?",
+    juste: "Coffre-fort de secrets, rotation automatique des mots de passe, accès juste-à-temps et enregistrement des sessions.",
+    presque: "Des mots de passe administrateur très complexes, stockés dans un gestionnaire de mots de passe partagé par l'équipe.",
+    faux: "Un compte administrateur unique partagé, dont le mot de passe ne change jamais pour éviter les blocages.",
+    expl: "Un gestionnaire partagé protège le secret au repos, mais sans rotation, traçabilité nominative ni limitation dans le temps, l'usage du privilège reste incontrôlé."
+  },
+  {
+    d: "IAM",
+    q: "Quelle est la différence entre OAuth 2.0 et OpenID Connect (OIDC) ?",
+    juste: "OAuth 2.0 est un cadre d'autorisation déléguée ; OIDC ajoute par-dessus une couche d'authentification (jeton d'identité, ID token).",
+    presque: "OAuth 2.0 suffit pour authentifier l'utilisateur, puisque le jeton d'accès prouve son identité ; OIDC n'est qu'une variante.",
+    faux: "OAuth est un algorithme de chiffrement des mots de passe.",
+    expl: "Un access token OAuth autorise l'accès à une ressource, il n'atteste pas l'identité de l'utilisateur auprès du client. C'est le rôle de l'ID token d'OIDC."
+  },
+  {
+    d: "IAM",
+    q: "Quelle mesure illustre la séparation des tâches (SoD) ?",
+    juste: "Empêcher qu'une même personne puisse à la fois créer un fournisseur et valider son paiement.",
+    presque: "Laisser une même personne créer le fournisseur et le payer, mais journaliser ses actions pour un contrôle a posteriori.",
+    faux: "Répartir les mots de passe entre plusieurs post-it pour qu'aucun ne soit complet.",
+    expl: "La journalisation est un contrôle compensatoire (détectif), pas une séparation des tâches : la SoD empêche la fraude en amont en exigeant deux personnes."
+  },
+  {
+    d: "IAM",
+    q: "Quel énoncé correspond le mieux au modèle Zero Trust ?",
+    juste: "Ne jamais accorder de confiance implicite : vérifier explicitement chaque accès (identité, état du terminal, contexte), quel que soit l'emplacement réseau.",
+    presque: "Authentifier fortement chaque utilisateur à la connexion, puis faire confiance à sa session pour toute la journée.",
+    faux: "Supprimer l'authentification, puisque le réseau interne est de confiance.",
+    expl: "Une authentification forte unique est un bon début, mais Zero Trust réévalue la confiance en continu et à chaque ressource demandée."
+  },
+
+  // ---------------- GRC (7) ----------------
+  {
+    d: "GRC",
+    q: "En analyse de risques, comment caractérise-t-on un risque ?",
+    juste: "Par la combinaison de la vraisemblance d'un scénario de menace et de la gravité de son impact.",
+    presque: "Par la seule gravité de l'impact si l'incident se produit.",
+    faux: "Par le nombre de vulnérabilités remontées par le scanner.",
+    expl: "Sans la vraisemblance, on ne peut pas prioriser : un impact grave mais quasi impossible ne se traite pas comme un impact moyen très probable."
+  },
+  {
+    d: "GRC",
+    q: "Dans l'ISO/IEC 27001:2022, que contient l'annexe A ?",
+    juste: "93 mesures de sécurité réparties en 4 thèmes : organisationnelles, humaines, physiques et technologiques.",
+    presque: "114 mesures de sécurité réparties en 14 domaines.",
+    faux: "La liste des logiciels de sécurité certifiés à installer.",
+    expl: "114 mesures en 14 domaines, c'était la version 2013. La révision 2022 a regroupé l'annexe A en 93 mesures et 4 thèmes."
+  },
+  {
+    d: "GRC",
+    q: "Qu'est-ce que la Déclaration d'applicabilité (SoA) dans un SMSI ISO 27001 ?",
+    juste: "Le document qui liste les mesures de l'annexe A retenues et exclues, avec la justification de chaque choix et leur état de mise en œuvre.",
+    presque: "La liste des mesures de sécurité effectivement mises en œuvre dans l'organisation.",
+    faux: "Le contrat signé avec l'organisme de certification.",
+    expl: "La SoA doit aussi couvrir les mesures exclues et justifier inclusions comme exclusions : c'est l'un des premiers documents examinés en audit."
+  },
+  {
+    d: "GRC",
+    q: "Quelles sont les options de traitement d'un risque ?",
+    juste: "Le réduire, le partager (transférer), l'éviter, ou l'accepter formellement par le propriétaire du risque.",
+    presque: "Le réduire, le transférer ou l'éviter ; l'acceptation d'un risque n'est jamais permise.",
+    faux: "L'ignorer tant qu'aucun incident ne s'est produit.",
+    expl: "L'acceptation est une option légitime, à condition d'être explicite, documentée et décidée par le propriétaire du risque."
+  },
+  {
+    d: "GRC",
+    q: "Une violation de données personnelles présentant un risque pour les personnes est découverte. Que prévoit l'article 33 du RGPD ?",
+    juste: "Notifier l'autorité de contrôle (la CNIL en France) dans les 72 heures après en avoir pris connaissance.",
+    presque: "Notifier la CNIL dans les 72 heures suivant la fin de l'enquête forensique.",
+    faux: "Attendre la prochaine revue annuelle de conformité pour décider.",
+    expl: "Le délai court à partir de la prise de connaissance, pas de la fin de l'enquête. Une notification initiale peut être complétée ensuite ; tout retard doit être justifié."
+  },
+  {
+    d: "GRC",
+    q: "Quelles sont les fonctions du NIST Cybersecurity Framework 2.0 ?",
+    juste: "Gouverner, Identifier, Protéger, Détecter, Répondre, Rétablir.",
+    presque: "Identifier, Protéger, Détecter, Répondre, Rétablir.",
+    faux: "Planifier, Coder, Tester, Déployer.",
+    expl: "Les cinq fonctions correspondent à la version 1.1. La version 2.0 (2024) ajoute « Gouverner » (Govern), placée au centre des cinq autres."
+  },
+  {
+    d: "GRC",
+    q: "Qu'est-ce que le risque résiduel ?",
+    juste: "Le risque qui subsiste après application des mesures de traitement, et qui doit être formellement accepté par le propriétaire du risque.",
+    presque: "Le risque qui subsiste après traitement, considéré comme automatiquement accepté puisqu'il est réduit.",
+    faux: "Le risque initial, avant toute mesure de sécurité.",
+    expl: "Le risque résiduel ne s'accepte pas par défaut : son acceptation est une décision tracée du propriétaire du risque. Le risque avant mesures, c'est le risque brut (inhérent)."
+  },
+
+  // ---------------- SOC (8) ----------------
+  {
+    d: "SOC",
+    q: "Quel est le principal danger d'un volume élevé de faux positifs dans un SOC ?",
+    juste: "La fatigue d'alerte : les analystes finissent par ignorer ou traiter trop vite des alertes, y compris les vraies.",
+    presque: "La saturation du stockage et l'augmentation des coûts du SIEM.",
+    faux: "Aucun : plus il y a d'alertes, mieux on est protégé.",
+    expl: "Le coût technique existe, mais le vrai risque est opérationnel : une attaque réelle noyée dans le bruit passe inaperçue."
+  },
+  {
+    d: "SOC",
+    q: "Un poste est en train d'être chiffré par un rançongiciel. Quelle est la première action ?",
+    juste: "Isoler le poste du réseau (par exemple via l'EDR) sans l'éteindre, pour stopper la propagation et préserver les preuves.",
+    presque: "Éteindre immédiatement le poste pour arrêter le chiffrement.",
+    faux: "Payer la rançon au plus vite pour limiter les dégâts.",
+    expl: "Éteindre stoppe le processus mais détruit la mémoire vive (clés, processus, artefacts) utile à l'investigation. L'isolement réseau contient sans perdre les preuves."
+  },
+  {
+    d: "SOC",
+    q: "Qu'est-ce que MITRE ATT&CK ?",
+    juste: "Une base de connaissances des tactiques et techniques adverses observées, utilisée notamment pour cartographier la couverture de détection.",
+    presque: "Un modèle linéaire en sept étapes décrivant le déroulé d'une intrusion.",
+    faux: "Un antivirus développé par l'organisation MITRE.",
+    expl: "Le modèle linéaire en sept étapes, c'est la Cyber Kill Chain de Lockheed Martin. ATT&CK est une matrice de tactiques et de techniques, non séquentielle."
+  },
+  {
+    d: "SOC",
+    q: "Quelle est la différence entre un SIEM et un SOAR ?",
+    juste: "Le SIEM centralise et corrèle les journaux pour détecter ; le SOAR orchestre et automatise la réponse au moyen de playbooks.",
+    presque: "Le SIEM centralise et corrèle les journaux ; le SOAR remplace les analystes en traitant tous les incidents sans intervention humaine.",
+    faux: "Le SIEM est un pare-feu et le SOAR un antivirus.",
+    expl: "Le SOAR automatise des tâches répétitives et enchaîne des actions, mais les décisions à fort impact restent validées par des analystes."
+  },
+  {
+    d: "SOC",
+    q: "Selon la « pyramide de la douleur » (David Bianco), quel indicateur coûte le plus cher à un attaquant à modifier une fois détecté ?",
+    juste: "Ses tactiques, techniques et procédures (TTP).",
+    presque: "Ses outils (tools).",
+    faux: "Les empreintes (hash) de ses fichiers.",
+    expl: "Les outils sont juste en dessous des TTP : en changer est coûteux, mais changer de façon d'opérer l'est encore plus. Un hash se modifie en changeant un seul octet."
+  },
+  {
+    d: "SOC",
+    q: "Que mesure l'indicateur MTTD (Mean Time To Detect) ?",
+    juste: "Le temps moyen entre le début d'un incident et sa détection.",
+    presque: "Le temps moyen entre la détection d'un incident et sa résolution.",
+    faux: "Le nombre moyen de tickets traités par analyste.",
+    expl: "Le temps entre détection et résolution relève des indicateurs de réponse (MTTR). Le MTTD mesure la durée pendant laquelle l'attaquant agit sans être vu."
+  },
+  {
+    d: "SOC",
+    q: "Pour que des journaux soient exploitables lors d'une investigation, il faut avant tout :",
+    juste: "Des horloges synchronisées (NTP), une centralisation hors de portée de l'attaquant et une intégrité protégée.",
+    presque: "Les conserver localement sur chaque serveur pendant au moins un an.",
+    faux: "Les supprimer chaque nuit pour économiser de l'espace disque.",
+    expl: "Des journaux conservés localement peuvent être effacés par un attaquant ayant les droits admin sur la machine, et sans horodatage cohérent on ne peut pas reconstituer la chronologie."
+  },
+  {
+    d: "SOC",
+    q: "Qu'est-ce que le threat hunting ?",
+    juste: "Une recherche proactive, guidée par des hypothèses, de menaces ayant échappé aux détections existantes.",
+    presque: "L'analyse approfondie des alertes remontées par le SIEM.",
+    faux: "Le blocage automatique de toutes les adresses IP étrangères.",
+    expl: "Analyser les alertes, c'est du triage, une activité réactive. Le hunting part du principe que l'attaquant est peut-être déjà là sans avoir déclenché d'alerte."
+  },
+
+  // ---------------- Sécurité de l'IA (7) ----------------
+  {
+    d: "IA",
+    q: "Qu'est-ce qu'une injection de prompt indirecte ?",
+    juste: "Des instructions malveillantes cachées dans un contenu externe (page web, document, e-mail) que le modèle traite, et qui détournent son comportement.",
+    presque: "Un utilisateur qui écrit lui-même « ignore tes instructions précédentes » dans la conversation.",
+    faux: "Un bug d'affichage du prompt dans l'interface du chatbot.",
+    expl: "Quand l'utilisateur tape lui-même l'instruction, c'est une injection directe. L'injection indirecte passe par des données tierces, par exemple les documents d'un RAG ou une page lue par un agent."
+  },
+  {
+    d: "IA",
+    q: "Quel risque occupe la 1re place de l'OWASP Top 10 for LLM Applications 2025 ?",
+    juste: "L'injection de prompt (LLM01).",
+    presque: "La divulgation d'informations sensibles (LLM02).",
+    faux: "Le dépassement de mémoire tampon du GPU.",
+    expl: "La divulgation d'informations sensibles est classée juste derrière, en LLM02. L'injection de prompt reste en tête depuis la première édition."
+  },
+  {
+    d: "IA",
+    q: "Un agent IA peut envoyer des e-mails et modifier le CRM. Quelle est la meilleure mesure contre l'« agentivité excessive » ?",
+    juste: "Limiter les outils et permissions de l'agent au strict nécessaire, et exiger une validation humaine pour les actions à fort impact.",
+    presque: "Ajouter dans le prompt système : « n'effectue jamais d'action dangereuse ».",
+    faux: "Donner à l'agent un compte administrateur pour éviter les erreurs de droits.",
+    expl: "Une consigne dans le prompt n'est pas un contrôle de sécurité : une injection de prompt peut la contourner. Les limites doivent être imposées hors du modèle (permissions, validation)."
+  },
+  {
+    d: "IA",
+    q: "Qu'est-ce que l'empoisonnement de données (data poisoning) ?",
+    juste: "Altérer les données d'entraînement, de fine-tuning ou de la base de connaissances (RAG) pour introduire des biais ou une porte dérobée.",
+    presque: "Modifier légèrement une entrée au moment de l'utilisation du modèle pour qu'il se trompe.",
+    faux: "Voler le mot de passe administrateur du serveur qui héberge le modèle.",
+    expl: "Modifier une entrée au moment de l'inférence, c'est une attaque par évasion (exemple adverse). L'empoisonnement agit en amont, sur ce que le modèle apprend ou consulte."
+  },
+  {
+    d: "IA",
+    q: "Un collaborateur colle un contrat client confidentiel dans un chatbot IA grand public non validé par l'entreprise. Quel est le principal risque ?",
+    juste: "La divulgation de données confidentielles à un tiers, qui peut les conserver ou les réutiliser selon ses conditions d'utilisation.",
+    presque: "Le chatbot peut produire une analyse juridique erronée du contrat.",
+    faux: "Aucun : les IA oublient tout dès la fin de la conversation.",
+    expl: "L'erreur d'analyse est un vrai risque, mais pas le principal sur le plan sécurité : une fois les données envoyées, l'entreprise ne contrôle plus leur conservation ni leur usage (« shadow AI »)."
+  },
+  {
+    d: "IA",
+    q: "Quelle est l'approche du règlement européen sur l'IA (AI Act) ?",
+    juste: "Une approche par les risques : pratiques interdites, systèmes à haut risque soumis à des obligations, obligations de transparence pour certains systèmes, et risque minimal peu encadré.",
+    presque: "Une approche par les risques qui ne vise que les fournisseurs de modèles, sans obligation pour les entreprises qui déploient ces systèmes.",
+    faux: "Une norme technique volontaire, sans portée juridique.",
+    expl: "L'AI Act impose aussi des obligations aux déployeurs (utilisateurs professionnels), notamment pour les systèmes à haut risque. C'est un règlement, directement applicable dans l'UE."
+  },
+  {
+    d: "IA",
+    q: "Une application s'appuie sur un LLM et doit appeler une API protégée par une clé. Où placer cette clé ?",
+    juste: "Dans un gestionnaire de secrets côté serveur, appelé par le code applicatif, jamais visible du modèle.",
+    presque: "Dans le prompt système, en demandant explicitement au modèle de ne jamais la révéler.",
+    faux: "Dans le code JavaScript du navigateur, pour simplifier l'intégration.",
+    expl: "Le prompt système peut fuiter (OWASP LLM07 : System Prompt Leakage). Une consigne de confidentialité n'empêche pas l'extraction : un secret ne doit jamais entrer dans le contexte du modèle."
+  }
+];
+
+/* =====================================================================
+   UTILITAIRES
+   ===================================================================== */
+function melanger(tab) {
+  const t = tab.slice();
+  for (let i = t.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [t[i], t[j]] = [t[j], t[i]];
+  }
+  return t;
+}
+
+/* Tirage : au moins MIN_PAR_DOMAINE questions par domaine, le reste au hasard. */
+function tirerQuestions() {
+  const choisies = [];
+  const restantes = [];
+  for (const d of Object.keys(DOMAINES)) {
+    const duDomaine = melanger(BANQUE.filter(x => x.d === d));
+    choisies.push(...duDomaine.slice(0, MIN_PAR_DOMAINE));
+    restantes.push(...duDomaine.slice(MIN_PAR_DOMAINE));
+  }
+  choisies.push(...melanger(restantes).slice(0, NB_QUESTIONS - choisies.length));
+  return melanger(choisies);
+}
+
+const $ = id => document.getElementById(id);
+
+/* =====================================================================
+   ÉTAT DU JEU
+   ===================================================================== */
+const canvas = $("board");
+const ctx = canvas.getContext("2d");
+
+let snake, dir, dirQueue, brick, timer, vitesse;
+let etat = "start";        // start | play | quiz | pause | end
+let questions = [], indexQ = 0, score = 0, historique = [], collisions = 0;
+let reponduQuestion = false;
+
+function couleur(nom) {
+  return getComputedStyle(document.documentElement).getPropertyValue(nom).trim();
+}
+
+function resetSerpent() {
+  const m = Math.floor(GRID / 2);
+  snake = [{ x: m, y: m }, { x: m - 1, y: m }, { x: m - 2, y: m }];
+  dir = { x: 1, y: 0 };
+  dirQueue = [];
+}
+
+function placerBrique() {
+  const libres = [];
+  for (let x = 0; x < GRID; x++)
+    for (let y = 0; y < GRID; y++)
+      if (!snake.some(s => s.x === x && s.y === y)) libres.push({ x, y });
+  brick = libres[Math.floor(Math.random() * libres.length)];
+}
+
+function majHud() {
+  $("hud-q").textContent = indexQ;
+  $("hud-score").textContent = score;
+  $("hud-len").textContent = snake ? snake.length : 3;
+}
+
+function afficher(ecran) {
+  for (const id of ["screen-start", "screen-quiz", "screen-pause", "screen-end"])
+    $(id).classList.toggle("visible", id === ecran);
+}
+
+/* =====================================================================
+   BOUCLE DE JEU
+   ===================================================================== */
+function demarrer() {
+  questions = tirerQuestions();
+  indexQ = 0; score = 0; historique = []; collisions = 0;
+  vitesse = VITESSE_INITIALE;
+  resetSerpent();
+  placerBrique();
+  majHud();
+  afficher(null);
+  etat = "play";
+  lancerBoucle();
+}
+
+function lancerBoucle() {
+  clearInterval(timer);
+  timer = setInterval(tick, vitesse);
+}
+
+function arreterBoucle() {
+  clearInterval(timer);
+  timer = null;
+}
+
+function tick() {
+  if (etat !== "play") return;
+
+  if (dirQueue.length) dir = dirQueue.shift();
+  const tete = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+  const mange = tete.x === brick.x && tete.y === brick.y;
+  // La queue se libère pendant ce déplacement, sauf si le serpent grandit.
+  const corps = mange ? snake : snake.slice(0, -1);
+  const horsPlateau = tete.x < 0 || tete.y < 0 || tete.x >= GRID || tete.y >= GRID;
+  const surLuiMeme = corps.some(s => s.x === tete.x && s.y === tete.y);
+
+  if (horsPlateau || surLuiMeme) {
+    collision();
+    return;
+  }
+
+  snake.unshift(tete);
+  if (mange) {
+    majHud();
+    dessiner();
+    poserQuestion();
+    return;
+  }
+  snake.pop();
+  dessiner();
+}
+
+function collision() {
+  collisions++;
+  arreterBoucle();
+  const toast = $("toast");
+  toast.classList.add("visible");
+  resetSerpent();
+  if (snake.some(s => s.x === brick.x && s.y === brick.y)) placerBrique();
+  majHud();
+  dessiner();
+  setTimeout(() => {
+    toast.classList.remove("visible");
+    if (etat === "play") lancerBoucle();
+  }, 900);
+}
+
+/* =====================================================================
+   QUESTIONS
+   ===================================================================== */
+function poserQuestion() {
+  etat = "quiz";
+  arreterBoucle();
+  reponduQuestion = false;
+
+  const q = questions[indexQ];
+  const tag = $("quiz-tag");
+  tag.className = "tag " + q.d;
+  tag.textContent = DOMAINES[q.d];
+  $("quiz-progress").textContent = `Question ${indexQ + 1}/${NB_QUESTIONS}`;
+  $("quiz-question").textContent = q.q;
+
+  const options = melanger([
+    { texte: q.juste, type: "juste" },
+    { texte: q.presque, type: "presque" },
+    { texte: q.faux, type: "faux" }
+  ]);
+
+  const zone = $("quiz-choices");
+  zone.innerHTML = "";
+  options.forEach((opt, i) => {
+    const b = document.createElement("button");
+    b.className = "choice";
+    b.dataset.type = opt.type;
+    const k = document.createElement("span");
+    k.className = "key";
+    k.textContent = i + 1;
+    const t = document.createElement("span");
+    t.textContent = opt.texte;
+    b.append(k, t);
+    b.addEventListener("click", () => repondre(b));
+    zone.appendChild(b);
+  });
+
+  const fb = $("quiz-feedback");
+  fb.className = "feedback";
+  fb.innerHTML = "";
+  $("btn-continue").hidden = true;
+
+  afficher("screen-quiz");
+  zone.firstChild.focus();
+}
+
+function repondre(bouton) {
+  if (reponduQuestion) return;
+  reponduQuestion = true;
+
+  const q = questions[indexQ];
+  const type = bouton.dataset.type;
+  const boutons = [...$("quiz-choices").children];
+  boutons.forEach(b => {
+    b.disabled = true;
+    if (b.dataset.type === "juste") b.classList.add("correct");
+  });
+
+  const fb = $("quiz-feedback");
+  let titre;
+  if (type === "juste") {
+    score++;
+    fb.className = "feedback visible ok";
+    titre = "Bonne réponse !";
+  } else if (type === "presque") {
+    bouton.classList.add("chosen-almost");
+    fb.className = "feedback visible almost";
+    titre = "Presque… mais pas tout à fait.";
+  } else {
+    bouton.classList.add("chosen-wrong");
+    fb.className = "feedback visible ko";
+    titre = "Mauvaise réponse.";
+  }
+  fb.innerHTML = "";
+  const s = document.createElement("strong");
+  s.textContent = titre;
+  const p = document.createElement("span");
+  p.textContent = q.expl;
+  fb.append(s, p);
+
+  historique.push({ q, type });
+  indexQ++;
+  majHud();
+
+  const btn = $("btn-continue");
+  btn.textContent = indexQ >= NB_QUESTIONS ? "Voir le résultat" : "Reprendre le jeu";
+  btn.hidden = false;
+  btn.focus();
+}
+
+function continuer() {
+  if (!reponduQuestion) return;
+  if (indexQ >= NB_QUESTIONS) {
+    terminer();
+    return;
+  }
+  placerBrique();
+  vitesse = Math.max(VITESSE_MIN, vitesse - 5);
+  afficher(null);
+  dessiner();
+  etat = "play";
+  // Court délai pour laisser le joueur reprendre ses repères.
+  setTimeout(() => { if (etat === "play") lancerBoucle(); }, 400);
+}
+
+/* =====================================================================
+   FIN DE PARTIE
+   ===================================================================== */
+function terminer() {
+  etat = "end";
+  arreterBoucle();
+
+  $("end-score").textContent = `${score}/${NB_QUESTIONS}`;
+  const verdict = $("end-verdict");
+  if (score > SEUIL_VALIDATION) {
+    verdict.textContent = "Compétences validées";
+    verdict.className = "verdict ok";
+  } else {
+    verdict.textContent = "Compétences à consolider";
+    verdict.className = "verdict ko";
+  }
+  $("end-rule").textContent =
+    `Validation au-delà de ${SEUIL_VALIDATION}/${NB_QUESTIONS} bonnes réponses. ` +
+    `Collisions pendant la partie : ${collisions}.`;
+
+  const bd = $("end-breakdown");
+  bd.innerHTML = "";
+  for (const [code, nom] of Object.entries(DOMAINES)) {
+    const items = historique.filter(h => h.q.d === code);
+    const ok = items.filter(h => h.type === "juste").length;
+    const div = document.createElement("div");
+    div.textContent = `${nom} : ${ok}/${items.length}`;
+    bd.appendChild(div);
+  }
+
+  const recap = $("end-recap");
+  recap.innerHTML = "";
+  const libelles = { juste: ["✔", "ok"], presque: ["≈", "almost"], faux: ["✘", "ko"] };
+  historique.forEach(h => {
+    const li = document.createElement("li");
+    const r = document.createElement("span");
+    r.className = "res " + libelles[h.type][1];
+    r.textContent = libelles[h.type][0];
+    const t = document.createElement("span");
+    t.textContent = h.q.q + " — ";
+    const rep = document.createElement("span");
+    rep.className = "muted";
+    rep.textContent = "Réponse : " + h.q.juste;
+    li.append(r, t, rep);
+    recap.appendChild(li);
+  });
+
+  afficher("screen-end");
+  // Le récapitulatif est long : on ouvre l'écran sur le score, pas sur le bouton.
+  $("screen-end").querySelector(".card").scrollTop = 0;
+  $("btn-restart").focus({ preventScroll: true });
+}
+
+/* =====================================================================
+   PAUSE
+   ===================================================================== */
+function basculerPause() {
+  if (etat === "play") {
+    etat = "pause";
+    arreterBoucle();
+    afficher("screen-pause");
+    $("btn-resume").focus();
+  } else if (etat === "pause") {
+    etat = "play";
+    afficher(null);
+    lancerBoucle();
+  }
+}
+
+/* =====================================================================
+   RENDU
+   ===================================================================== */
+function ajusterCanvas() {
+  const ratio = window.devicePixelRatio || 1;
+  const taille = canvas.clientWidth;
+  canvas.width = Math.round(taille * ratio);
+  canvas.height = Math.round(taille * ratio);
+  dessiner();
+}
+
+function dessiner() {
+  const W = canvas.width;
+  const c = W / GRID;
+  ctx.fillStyle = couleur("--panel");
+  ctx.fillRect(0, 0, W, W);
+
+  // Grille discrète
+  ctx.strokeStyle = couleur("--grid");
+  ctx.lineWidth = 1;
+  for (let i = 1; i < GRID; i++) {
+    ctx.beginPath(); ctx.moveTo(i * c, 0); ctx.lineTo(i * c, W); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * c); ctx.lineTo(W, i * c); ctx.stroke();
+  }
+
+  if (!snake) return;
+
+  // Brique
+  if (brick) {
+    const x = brick.x * c, y = brick.y * c, p = c * 0.08;
+    ctx.fillStyle = couleur("--brick");
+    ctx.fillRect(x + p, y + p, c - 2 * p, c - 2 * p);
+    ctx.strokeStyle = couleur("--brick-line");
+    ctx.lineWidth = Math.max(1, c * 0.06);
+    ctx.beginPath();
+    ctx.moveTo(x + p, y + c / 2); ctx.lineTo(x + c - p, y + c / 2);
+    ctx.moveTo(x + c / 2, y + p); ctx.lineTo(x + c / 2, y + c / 2);
+    ctx.moveTo(x + c / 4, y + c / 2); ctx.lineTo(x + c / 4, y + c - p);
+    ctx.moveTo(x + 3 * c / 4, y + c / 2); ctx.lineTo(x + 3 * c / 4, y + c - p);
+    ctx.stroke();
+  }
+
+  // Serpent
+  snake.forEach((s, i) => {
+    ctx.fillStyle = i === 0 ? couleur("--snake-head") : couleur("--snake");
+    const p = c * 0.1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(s.x * c + p, s.y * c + p, c - 2 * p, c - 2 * p, c * 0.25);
+    else ctx.rect(s.x * c + p, s.y * c + p, c - 2 * p, c - 2 * p);
+    ctx.fill();
+  });
+
+  // Yeux
+  const h = snake[0];
+  ctx.fillStyle = "#0b1020";
+  const r = c * 0.09;
+  const cx = h.x * c + c / 2, cy = h.y * c + c / 2;
+  const ox = dir.y !== 0 ? c * 0.18 : 0, oy = dir.x !== 0 ? c * 0.18 : 0;
+  const fx = dir.x * c * 0.15, fy = dir.y * c * 0.15;
+  ctx.beginPath(); ctx.arc(cx + fx + ox, cy + fy + oy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + fx - ox, cy + fy - oy, r, 0, Math.PI * 2); ctx.fill();
+}
+
+/* =====================================================================
+   COMMANDES
+   ===================================================================== */
+const DIRS = {
+  up: { x: 0, y: -1 }, down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 }, right: { x: 1, y: 0 }
+};
+
+function changerDirection(nom) {
+  if (etat !== "play") return;
+  const nd = DIRS[nom];
+  const derniere = dirQueue.length ? dirQueue[dirQueue.length - 1] : dir;
+  // Ni demi-tour, ni doublon ; file limitée à 2 virages anticipés.
+  if (nd.x === -derniere.x && nd.y === -derniere.y) return;
+  if (nd.x === derniere.x && nd.y === derniere.y) return;
+  if (dirQueue.length < 2) dirQueue.push(nd);
+}
+
+const TOUCHES = {
+  ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+  z: "up", w: "up", s: "down", q: "left", a: "left", d: "right"
+};
+
+document.addEventListener("keydown", e => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+
+  if (etat === "quiz") {
+    if (!reponduQuestion && ["1", "2", "3"].includes(k)) {
+      const b = $("quiz-choices").children[Number(k) - 1];
+      if (b) repondre(b);
+      e.preventDefault();
+    }
+    return;
+  }
+
+  if (k === " " && (etat === "play" || etat === "pause")) {
+    basculerPause();
+    e.preventDefault();
+    return;
+  }
+
+  if (TOUCHES[k]) {
+    changerDirection(TOUCHES[k]);
+    e.preventDefault();
+  }
+});
+
+// Balayage tactile
+let toucheDepart = null;
+canvas.addEventListener("touchstart", e => {
+  const t = e.touches[0];
+  toucheDepart = { x: t.clientX, y: t.clientY };
+}, { passive: true });
+canvas.addEventListener("touchend", e => {
+  if (!toucheDepart) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - toucheDepart.x, dy = t.clientY - toucheDepart.y;
+  toucheDepart = null;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) return;
+  if (Math.abs(dx) > Math.abs(dy)) changerDirection(dx > 0 ? "right" : "left");
+  else changerDirection(dy > 0 ? "down" : "up");
+});
+
+document.querySelectorAll(".pad button").forEach(b =>
+  b.addEventListener("click", () => changerDirection(b.dataset.dir)));
+
+$("btn-start").addEventListener("click", demarrer);
+$("btn-restart").addEventListener("click", demarrer);
+$("btn-continue").addEventListener("click", continuer);
+$("btn-resume").addEventListener("click", basculerPause);
+
+// Mise en pause automatique si l'onglet perd le focus
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && etat === "play") basculerPause();
+});
+
+window.addEventListener("resize", ajusterCanvas);
+
+/* Contrôle d'intégrité de la banque au chargement */
+(function verifierBanque() {
+  const parDomaine = {};
+  BANQUE.forEach(q => { parDomaine[q.d] = (parDomaine[q.d] || 0) + 1; });
+  if (BANQUE.length !== 30) console.warn(`Banque : ${BANQUE.length} questions (30 attendues).`);
+  for (const d of Object.keys(DOMAINES))
+    if ((parDomaine[d] || 0) < MIN_PAR_DOMAINE) console.warn(`Domaine ${d} insuffisamment fourni.`);
+})();
+
+ajusterCanvas();
+</script>
+</body>
+</html>
