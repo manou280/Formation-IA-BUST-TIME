@@ -12,8 +12,6 @@
     --text: #e2e8f0;
     --muted: #94a3b8;
     --accent: #22d3ee;
-    --snake: #34d399;
-    --snake-head: #10b981;
     --brick: #f97316;
     --brick-line: #7c2d12;
     --grid: #16223f;
@@ -244,6 +242,7 @@ const MIN_PAR_DOMAINE = 2;      // chaque domaine apparaît au moins 2 fois par 
 const GRID = 20;                // plateau de 20 x 20 cases
 const VITESSE_INITIALE = 140;   // ms par déplacement
 const VITESSE_MIN = 85;
+const DUREE_EXPLOSION = 750;    // ms d'animation avant l'affichage de la question
 
 const DOMAINES = {
   IAM: "IAM",
@@ -540,7 +539,7 @@ const canvas = $("board");
 const ctx = canvas.getContext("2d");
 
 let snake, dir, dirQueue, brick, timer, vitesse;
-let etat = "start";        // start | play | quiz | pause | end
+let etat = "start";        // start | play | explosion | quiz | pause | end
 let questions = [], indexQ = 0, score = 0, historique = [], collisions = 0;
 let reponduQuestion = false;
 
@@ -619,12 +618,19 @@ function tick() {
   snake.unshift(tete);
   if (mange) {
     majHud();
-    dessiner();
-    poserQuestion();
+    exploserBrique();
     return;
   }
   snake.pop();
-  dessiner();
+}
+
+/* La brique explose, puis la question s'affiche une fois l'effet joué. */
+function exploserBrique() {
+  etat = "explosion";
+  arreterBoucle();
+  declencherExplosion(brick.x, brick.y);
+  brick = null;
+  setTimeout(() => { if (etat === "explosion") poserQuestion(); }, DUREE_EXPLOSION);
 }
 
 function collision() {
@@ -635,7 +641,6 @@ function collision() {
   resetSerpent();
   if (snake.some(s => s.x === brick.x && s.y === brick.y)) placerBrique();
   majHud();
-  dessiner();
   setTimeout(() => {
     toast.classList.remove("visible");
     if (etat === "play") lancerBoucle();
@@ -741,7 +746,6 @@ function continuer() {
   placerBrique();
   vitesse = Math.max(VITESSE_MIN, vitesse - 5);
   afficher(null);
-  dessiner();
   etat = "play";
   // Court délai pour laisser le joueur reprendre ses repères.
   setTimeout(() => { if (etat === "play") lancerBoucle(); }, 400);
@@ -819,36 +823,113 @@ function basculerPause() {
 /* =====================================================================
    RENDU
    ===================================================================== */
+const reduireAnimations = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let particules = [];   // étincelles et éclats de brique
+let ondes = [];        // ondes de choc
+let paillettes = [];   // éclats scintillants le long du serpent
+let secousse = 0, flash = 0;
+let teinte = 0;        // décalage de l'arc-en-ciel, n'avance que si le serpent bouge
+let dernierT = 0;
+let palette = {};
+
+function lirePalette() {
+  palette = {
+    panel: couleur("--panel"), grid: couleur("--grid"),
+    brick: couleur("--brick"), brickLine: couleur("--brick-line")
+  };
+}
+
 function ajusterCanvas() {
   const ratio = window.devicePixelRatio || 1;
   const taille = canvas.clientWidth;
   canvas.width = Math.round(taille * ratio);
   canvas.height = Math.round(taille * ratio);
-  dessiner();
 }
 
-function dessiner() {
+function declencherExplosion(gx, gy) {
+  const c = canvas.width / GRID;
+  const cx = (gx + 0.5) * c, cy = (gy + 0.5) * c;
+  const feu = ["#fff7ed", "#fde047", "#fbbf24", "#fb923c", "#ef4444"];
+  const nb = reduireAnimations ? 16 : 56;
+  for (let i = 0; i < nb; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const v = c * (0.002 + Math.random() * 0.009);   // px par ms
+    const eclat = i % 4 === 0;                      // un quart d'éclats de brique
+    particules.push({
+      x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - c * 0.002,
+      vie: 0, max: 450 + Math.random() * 450,
+      taille: eclat ? c * (0.18 + Math.random() * 0.17) : c * (0.05 + Math.random() * 0.1),
+      couleur: eclat ? palette.brick : feu[Math.floor(Math.random() * feu.length)],
+      eclat, rot: Math.random() * Math.PI, vrot: (Math.random() - 0.5) * 0.02
+    });
+  }
+  ondes.push({ x: cx, y: cy, vie: 0, max: 480 });
+  if (!reduireAnimations) {
+    ondes.push({ x: cx, y: cy, vie: -90, max: 480 });
+    secousse = 260;
+    flash = 140;
+  }
+}
+
+function majEffets(dt, enMouvement) {
+  const c = canvas.width / GRID;
+  const gravite = c * 0.000012;
+  particules = particules.filter(p => {
+    p.vie += dt;
+    p.vx *= 0.985; p.vy = p.vy * 0.985 + gravite * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vrot * dt;
+    return p.vie < p.max;
+  });
+  ondes = ondes.filter(o => (o.vie += dt) < o.max);
+  secousse = Math.max(0, secousse - dt);
+  flash = Math.max(0, flash - dt);
+
+  // Le scintillement n'existe que pendant le déplacement.
+  if (enMouvement && !reduireAnimations && snake && Math.random() < dt / 45) {
+    const s = snake[Math.floor(Math.random() * snake.length)];
+    paillettes.push({
+      x: (s.x + 0.2 + Math.random() * 0.6) * c, y: (s.y + 0.2 + Math.random() * 0.6) * c,
+      vie: 0, max: 250 + Math.random() * 250
+    });
+  }
+  paillettes = paillettes.filter(p => (p.vie += dt) < p.max);
+}
+
+function etoile(x, y, r) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - r); ctx.lineTo(x + r * 0.25, y - r * 0.25);
+  ctx.lineTo(x + r, y); ctx.lineTo(x + r * 0.25, y + r * 0.25);
+  ctx.lineTo(x, y + r); ctx.lineTo(x - r * 0.25, y + r * 0.25);
+  ctx.lineTo(x - r, y); ctx.lineTo(x - r * 0.25, y - r * 0.25);
+  ctx.closePath(); ctx.fill();
+}
+
+function dessiner(t = 0, enMouvement = false) {
   const W = canvas.width;
   const c = W / GRID;
-  ctx.fillStyle = couleur("--panel");
+  ctx.fillStyle = palette.panel;
   ctx.fillRect(0, 0, W, W);
 
+  ctx.save();
+  if (secousse > 0) {
+    const amp = c * 0.3 * (secousse / 260);
+    ctx.translate((Math.random() - 0.5) * amp, (Math.random() - 0.5) * amp);
+  }
+
   // Grille discrète
-  ctx.strokeStyle = couleur("--grid");
+  ctx.strokeStyle = palette.grid;
   ctx.lineWidth = 1;
   for (let i = 1; i < GRID; i++) {
     ctx.beginPath(); ctx.moveTo(i * c, 0); ctx.lineTo(i * c, W); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, i * c); ctx.lineTo(W, i * c); ctx.stroke();
   }
 
-  if (!snake) return;
-
   // Brique
-  if (brick) {
+  if (snake && brick) {
     const x = brick.x * c, y = brick.y * c, p = c * 0.08;
-    ctx.fillStyle = couleur("--brick");
+    ctx.fillStyle = palette.brick;
     ctx.fillRect(x + p, y + p, c - 2 * p, c - 2 * p);
-    ctx.strokeStyle = couleur("--brick-line");
+    ctx.strokeStyle = palette.brickLine;
     ctx.lineWidth = Math.max(1, c * 0.06);
     ctx.beginPath();
     ctx.moveTo(x + p, y + c / 2); ctx.lineTo(x + c - p, y + c / 2);
@@ -858,25 +939,87 @@ function dessiner() {
     ctx.stroke();
   }
 
-  // Serpent
-  snake.forEach((s, i) => {
-    ctx.fillStyle = i === 0 ? couleur("--snake-head") : couleur("--snake");
+  // Serpent arc-en-ciel : chaque anneau a sa teinte, la luminosité ondule en mouvement.
+  if (snake) {
     const p = c * 0.1;
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(s.x * c + p, s.y * c + p, c - 2 * p, c - 2 * p, c * 0.25);
-    else ctx.rect(s.x * c + p, s.y * c + p, c - 2 * p, c - 2 * p);
-    ctx.fill();
-  });
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const s = snake[i];
+      const h = (teinte + i * 28) % 360;
+      const l = 56 + (enMouvement ? 14 * Math.sin(t * 0.018 - i * 0.9) : 0) + (i === 0 ? 4 : 0);
+      ctx.fillStyle = `hsl(${h}, 95%, ${l}%)`;
+      ctx.shadowColor = `hsl(${h}, 100%, 60%)`;
+      ctx.shadowBlur = enMouvement ? c * 0.55 : c * 0.25;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(s.x * c + p, s.y * c + p, c - 2 * p, c - 2 * p, c * 0.25);
+      else ctx.rect(s.x * c + p, s.y * c + p, c - 2 * p, c - 2 * p);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
 
-  // Yeux
-  const h = snake[0];
-  ctx.fillStyle = "#0b1020";
-  const r = c * 0.09;
-  const cx = h.x * c + c / 2, cy = h.y * c + c / 2;
-  const ox = dir.y !== 0 ? c * 0.18 : 0, oy = dir.x !== 0 ? c * 0.18 : 0;
-  const fx = dir.x * c * 0.15, fy = dir.y * c * 0.15;
-  ctx.beginPath(); ctx.arc(cx + fx + ox, cy + fy + oy, r, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(cx + fx - ox, cy + fy - oy, r, 0, Math.PI * 2); ctx.fill();
+    // Yeux
+    const hd = snake[0];
+    ctx.fillStyle = "#0b1020";
+    const r = c * 0.09;
+    const cx = hd.x * c + c / 2, cy = hd.y * c + c / 2;
+    const ox = dir.y !== 0 ? c * 0.18 : 0, oy = dir.x !== 0 ? c * 0.18 : 0;
+    const fx = dir.x * c * 0.15, fy = dir.y * c * 0.15;
+    ctx.beginPath(); ctx.arc(cx + fx + ox, cy + fy + oy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + fx - ox, cy + fy - oy, r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Paillettes
+  ctx.fillStyle = "#ffffff";
+  for (const pl of paillettes) {
+    const k = Math.sin(Math.PI * pl.vie / pl.max);
+    ctx.globalAlpha = k;
+    etoile(pl.x, pl.y, c * 0.22 * k);
+  }
+  ctx.globalAlpha = 1;
+
+  // Ondes de choc
+  for (const o of ondes) {
+    if (o.vie < 0) continue;
+    const k = o.vie / o.max;
+    ctx.strokeStyle = `rgba(253, 224, 71, ${1 - k})`;
+    ctx.lineWidth = c * 0.18 * (1 - k) + 1;
+    ctx.beginPath(); ctx.arc(o.x, o.y, c * (0.3 + 3 * k), 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // Particules : étincelles additives, éclats de brique en rotation
+  for (const pt of particules) {
+    const a = 1 - pt.vie / pt.max;
+    ctx.globalAlpha = a;
+    if (pt.eclat) {
+      ctx.save();
+      ctx.translate(pt.x, pt.y); ctx.rotate(pt.rot);
+      ctx.fillStyle = pt.couleur;
+      ctx.fillRect(-pt.taille / 2, -pt.taille / 2, pt.taille, pt.taille * 0.6);
+      ctx.restore();
+    } else {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = pt.couleur;
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.taille * (0.5 + a / 2), 0, Math.PI * 2); ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // Éclair blanc au moment de l'impact
+  if (flash > 0) {
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.35 * flash / 140})`;
+    ctx.fillRect(0, 0, W, W);
+  }
+}
+
+function boucleRendu(t) {
+  const dt = dernierT ? Math.min(50, t - dernierT) : 16;
+  dernierT = t;
+  const enMouvement = etat === "play" && timer !== null;
+  if (enMouvement) teinte = (teinte + dt * (reduireAnimations ? 0.03 : 0.15)) % 360;
+  majEffets(dt, enMouvement);
+  dessiner(t, enMouvement);
+  requestAnimationFrame(boucleRendu);
 }
 
 /* =====================================================================
@@ -966,7 +1109,9 @@ window.addEventListener("resize", ajusterCanvas);
     if ((parDomaine[d] || 0) < MIN_PAR_DOMAINE) console.warn(`Domaine ${d} insuffisamment fourni.`);
 })();
 
+lirePalette();
 ajusterCanvas();
+requestAnimationFrame(boucleRendu);
 </script>
 </body>
 </html>
